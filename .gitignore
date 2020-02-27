@@ -5,3 +5,4 @@ debug*
 coverage.out
 cpuprof*
 memprof*
+test
