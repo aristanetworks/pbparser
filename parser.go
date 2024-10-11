@@ -1058,6 +1058,13 @@ func (p *parser) readMultiLineComment() string {
 func (p *parser) readSingleLineComment() string {
 	str := strings.TrimSpace(p.readUntilNewline())
 	for {
+		// If the next character is \n, then it implies we have
+		// an empty line. Ignore the comments before the empty line.
+		if c := p.read(); c == '\n' {
+			break
+		} else {
+			p.unread()
+		}
 		p.skipWhitespace()
 		if c := p.read(); c != '/' {
 			p.unread()

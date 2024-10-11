@@ -330,6 +330,38 @@ func TestParseFile(t *testing.T) {
 	}
 }
 
+func TestComments(t *testing.T) {
+	var tests = []struct {
+		file             string
+		expectedComments []string
+	}{
+		{
+			file: "./resources/comments.proto",
+			expectedComments: []string{
+				"Both lines should be kept here Foo",
+				"Bar",
+				"Bar2",
+				"ReverseBar",
+				"The second multiline comment",
+			},
+		},
+	}
+	for _, tt := range tests {
+		fmt.Printf("Parsing file: %v \n", tt.file)
+		pf, err := ParseFile(tt.file)
+		if err != nil {
+			t.Errorf("%s: %v", tt.file, err.Error())
+			continue
+		}
+		for i, m := range pf.Messages {
+			if m.Documentation != tt.expectedComments[i] {
+				t.Errorf("expected comment: %s, actual comment: %s",
+					tt.expectedComments[i], m.Documentation)
+			}
+		}
+	}
+}
+
 func printMessage(m *MessageElement, prefix string) {
 	fmt.Println(prefix + "Message: " + m.Name)
 	fmt.Println(prefix + "QualifiedName: " + m.QualifiedName)

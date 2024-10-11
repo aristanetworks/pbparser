@@ -1,0 +1,42 @@
+/* Docstring beginning of file
+*/
+syntax = "proto3";
+package commentspkg;
+
+// Both lines should be kept here
+// Foo
+message Foo {
+}
+
+// This line should be removed during parsing
+
+// Bar
+message Bar {
+}
+
+/*
+Testing multiline comment with single line comment
+*/
+
+// Bar2
+message Bar2 {
+}
+
+// Testing single line comment with multiline comment
+
+/*
+ReverseBar
+*/
+message ReverseBar {
+}
+
+/*   
+Two multiline comments for this test case
+test
+*/
+
+/*
+The second multiline comment
+*/
+message TwoMultiLine {
+}
