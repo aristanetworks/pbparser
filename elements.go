@@ -141,4 +141,5 @@ type ProtoFile struct {
 	Messages           []MessageElement
 	Services           []ServiceElement
 	ExtendDeclarations []ExtendElement
+	Oracles            map[string]ProtoFileOracle
 }

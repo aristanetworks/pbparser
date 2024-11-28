@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -469,3 +471,21 @@ var (
 	tab  = indent(2)
 	tab2 = indent(4)
 )
+
+func Test_External_Enum(t *testing.T) {
+	file := "./resources/service.proto"
+
+	// invoke ParseFile() API to parse the file
+	pf, err := ParseFile(file)
+	if err != nil {
+		t.Fatalf("Unable to parse proto file: %v \n", err)
+	}
+
+	// print attributes of the returned datastructure
+	fmt.Printf("PackageName: %v, Syntax: %v\n", pf.PackageName, pf.Syntax)
+	fmt.Printf("Oracles: %v", pf.Oracles)
+
+	oracle, ok := pf.Oracles["publicx"]
+	assert.True(t, ok)
+	assert.True(t, oracle.HasEnum("publicx.StatusEnum"))
+}

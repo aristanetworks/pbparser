@@ -7,10 +7,15 @@ import (
 	"unicode"
 )
 
-type protoFileOracle struct {
+type ProtoFileOracle struct {
 	pf      *ProtoFile
 	msgmap  map[string]bool
 	enummap map[string]bool
+}
+
+func (p *ProtoFileOracle) HasEnum(enum string) bool {
+	_, ok := p.enummap[enum]
+	return ok
 }
 
 func verify(pf *ProtoFile, p ImportModuleProvider) error {
@@ -24,39 +29,39 @@ func verify(pf *ProtoFile, p ImportModuleProvider) error {
 	}
 
 	// make a map of package to its oracle...
-	m := make(map[string]protoFileOracle)
+	pf.Oracles = make(map[string]ProtoFileOracle)
 
 	// parse the dependencies...
-	if err := parseDependencies(p, pf.Dependencies, m); err != nil {
+	if err := parseDependencies(p, pf.Dependencies, pf.Oracles); err != nil {
 		return err
 	}
 	// parse the public dependencies...
-	if err := parseDependencies(p, pf.PublicDependencies, m); err != nil {
+	if err := parseDependencies(p, pf.PublicDependencies, pf.Oracles); err != nil {
 		return err
 	}
 
 	// make oracle for main package and add to map...
-	orcl := protoFileOracle{pf: pf}
+	orcl := ProtoFileOracle{pf: pf}
 	orcl.msgmap, orcl.enummap = makeQNameLookup(pf)
-	if _, found := m[pf.PackageName]; found {
+	if _, found := pf.Oracles[pf.PackageName]; found {
 		for k, v := range orcl.msgmap {
-			m[pf.PackageName].msgmap[k] = v
+			pf.Oracles[pf.PackageName].msgmap[k] = v
 		}
 		for k, v := range orcl.enummap {
-			m[pf.PackageName].enummap[k] = v
+			pf.Oracles[pf.PackageName].enummap[k] = v
 		}
 
 		// update the main model as well in case it is defined across multiple files
-		merge(pf, m[pf.PackageName].pf)
+		merge(pf, pf.Oracles[pf.PackageName].pf)
 	} else {
-		m[pf.PackageName] = orcl
+		pf.Oracles[pf.PackageName] = orcl
 	}
 
 	// collate the dependency package names...
-	packageNames := getDependencyPackageNames(pf.PackageName, m)
+	packageNames := getDependencyPackageNames(pf.PackageName, pf.Oracles)
 
 	// check if imported packages are in use
-	if err := areImportedPackagesUsed(pf, packageNames, m); err != nil {
+	if err := areImportedPackagesUsed(pf, packageNames); err != nil {
 		return err
 	}
 
@@ -66,7 +71,7 @@ func verify(pf *ProtoFile, p ImportModuleProvider) error {
 	findFieldsToValidate(pf.Messages, &fields)
 	for _, f := range fields {
 		if err := validateFieldDataTypes(
-			pf.PackageName, f, pf.Messages, pf.Enums, m, packageNames); err != nil {
+			pf.PackageName, f, pf.Messages, pf.Enums, pf.Oracles, packageNames); err != nil {
 			return err
 		}
 	}
@@ -76,13 +81,15 @@ func verify(pf *ProtoFile, p ImportModuleProvider) error {
 	for _, s := range pf.Services {
 		for _, rpc := range s.RPCs {
 			err := validateRPCDataType(
-				pf.PackageName, s.Name, rpc.Name, rpc.RequestType, pf.Messages, m, packageNames)
+				pf.PackageName, s.Name, rpc.Name, rpc.RequestType, pf.Messages, pf.Oracles,
+				packageNames)
 			if err != nil {
 				return err
 			}
 
 			err = validateRPCDataType(
-				pf.PackageName, s.Name, rpc.Name, rpc.ResponseType, pf.Messages, m, packageNames)
+				pf.PackageName, s.Name, rpc.Name, rpc.ResponseType, pf.Messages, pf.Oracles,
+				packageNames)
 			if err != nil {
 				return err
 			}
@@ -134,7 +141,7 @@ func merge(dest *ProtoFile, src *ProtoFile) {
 	dest.ExtendDeclarations = append(dest.ExtendDeclarations, src.ExtendDeclarations...)
 }
 
-func extendsProtobuf(pkg string, m map[string]protoFileOracle) bool {
+func extendsProtobuf(pkg string, m map[string]ProtoFileOracle) bool {
 	orcl := m[pkg]
 	for _, ext := range orcl.pf.ExtendDeclarations {
 		switch ext.Name {
@@ -155,7 +162,7 @@ func extendsProtobuf(pkg string, m map[string]protoFileOracle) bool {
 	return false
 }
 
-func extendsImportedPackage(pkgName string, m map[string]protoFileOracle) bool {
+func extendsImportedPackage(pkgName string, m map[string]ProtoFileOracle) bool {
 	orcl := m[pkgName]
 	for _, ext := range orcl.pf.ExtendDeclarations {
 		extTargetParts := strings.Split(ext.Name, ".")
@@ -171,12 +178,11 @@ func extendsImportedPackage(pkgName string, m map[string]protoFileOracle) bool {
 func areImportedPackagesUsed(
 	pf *ProtoFile,
 	packageNames []string,
-	m map[string]protoFileOracle,
 ) error {
 	for _, pkg := range packageNames {
 		var inuse bool
 
-		if extendsProtobuf(pkg, m) || extendsImportedPackage(pkg, m) {
+		if extendsProtobuf(pkg, pf.Oracles) || extendsImportedPackage(pkg, pf.Oracles) {
 			inuse = true
 			goto LABEL
 		}
@@ -334,7 +340,7 @@ func validateSyntax(pf *ProtoFile) error {
 	return nil
 }
 
-func getDependencyPackageNames(mainPkgName string, m map[string]protoFileOracle) []string {
+func getDependencyPackageNames(mainPkgName string, m map[string]ProtoFileOracle) []string {
 	var keys []string
 	for k := range m {
 		if k == mainPkgName {
@@ -392,7 +398,7 @@ func validateFieldDataTypes(
 	f fd,
 	msgs []MessageElement,
 	enums []EnumElement,
-	m map[string]protoFileOracle,
+	m map[string]ProtoFileOracle,
 	packageNames []string,
 ) error {
 	var found bool
@@ -446,7 +452,7 @@ func validateRPCDataType(
 	rpc string,
 	datatype NamedDataType,
 	msgs []MessageElement,
-	m map[string]protoFileOracle,
+	m map[string]ProtoFileOracle,
 	packageNames []string,
 ) error {
 	var found bool
@@ -540,7 +546,7 @@ func checkEnumName(s string, enums []EnumElement) bool {
 func parseDependencies(
 	impr ImportModuleProvider,
 	dependencies []string,
-	m map[string]protoFileOracle,
+	m map[string]ProtoFileOracle,
 ) error {
 	for _, d := range dependencies {
 		r, err := impr.Provide(d)
@@ -566,7 +572,7 @@ func parseDependencies(
 			return err
 		}
 
-		orcl := protoFileOracle{pf: &dpf}
+		orcl := ProtoFileOracle{pf: &dpf}
 		orcl.msgmap, orcl.enummap = makeQNameLookup(&dpf)
 
 		if _, found := m[dpf.PackageName]; found {
